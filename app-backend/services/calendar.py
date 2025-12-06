@@ -5,54 +5,31 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from google.oauth2 import service_account
 
 # Google Calendar API scope
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+calendar_id = "41a68850cc35f8233d323d7b59cc1b05336db4387c7ce48ae765db3c6df9ccb3@group.calendar.google.com"
+SERVICE_ACCOUNT_FILE = "credentials.json"
+
 
 def get_calendar_service():
     """Authenticate and return a Google Calendar service object."""
-    creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-    
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open("token.json", "w") as token:
-            token.write(creds.to_json())
-
-    service = build("calendar", "v3", credentials=creds)
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES
+    )
+    service = build("calendar", "v3", credentials=credentials)
     return service
-
+    
 def check_for_conflicts(event_datetime: datetime.datetime, duration_minutes: int = 30):
-    """
-    Returns a list of events happening around the proposed appointment time.
-
-    Each event in the list contains:
-        - summary: title of the event
-        - start: start datetime (or date for all-day)
-        - end: end datetime (or date for all-day)
-        - type: "online" or "offline" (determined from event metadata or default)
-    
-    Parameters:
-        event_datetime: datetime.datetime object of proposed appointment
-        duration_minutes: length of appointment in minutes
-    
-    Returns:
-        List[dict] of relevant events
-    """
+    """Return a list of events around the proposed appointment time."""
     service = get_calendar_service()
-    
-    # Define the window: start_time and end_time for overlap check
     start_time = event_datetime.isoformat()
     end_time = (event_datetime + datetime.timedelta(minutes=duration_minutes)).isoformat()
 
     try:
         events_result = service.events().list(
-            calendarId="primary",
+            calendarId=calendar_id,
             timeMin=start_time,
             timeMax=end_time,
             singleEvents=True,
@@ -63,16 +40,13 @@ def check_for_conflicts(event_datetime: datetime.datetime, duration_minutes: int
         relevant_events = []
 
         for event in raw_events:
-            # Handle all-day events
             if "dateTime" in event["start"]:
                 ev_start = event["start"]["dateTime"]
                 ev_end = event["end"]["dateTime"]
             else:
-                # all-day events only have 'date'
                 ev_start = event["start"]["date"]
                 ev_end = event["end"]["date"]
 
-            # Determine type (example: if location or description contains "online")
             ev_type = "offline"
             if "online" in (event.get("location") or "").lower() or \
                "online" in (event.get("description") or "").lower():
@@ -91,18 +65,9 @@ def check_for_conflicts(event_datetime: datetime.datetime, duration_minutes: int
         print(f"An error occurred while checking conflicts: {error}")
         return []
 
-
 def add_event_to_calendar(event_subject: str, event_datetime: datetime.datetime, duration_minutes: int = 30):
-    """
-    Add an event to Google Calendar.
-
-    Parameters:
-        event_subject (str): Title of the event
-        event_datetime (datetime.datetime): Start time of the event (UTC)
-        duration_minutes (int): Event duration in minutes (default 30)
-    """
+    """Add an event to Google Calendar."""
     service = get_calendar_service()
-
     event = {
         "summary": event_subject,
         "start": {"dateTime": event_datetime.isoformat(), "timeZone": "UTC"},
@@ -113,21 +78,44 @@ def add_event_to_calendar(event_subject: str, event_datetime: datetime.datetime,
     }
 
     try:
-        created_event = service.events().insert(calendarId="primary", body=event).execute()
+        created_event = service.events().insert(calendarId=calendar_id, body=event).execute()
         print(f"Event created: {created_event.get('htmlLink')}")
         return created_event
     except HttpError as error:
         print(f"An error occurred: {error}")
         return None
 
-# Example usage
+# ------------------ MAIN ------------------
 if __name__ == "__main__":
-    appointment_datetime = datetime.datetime(2025, 12, 12, 15, 0, tzinfo=datetime.timezone.utc)
-    conflicts = check_for_conflicts(appointment_datetime, duration_minutes=30)
-    if not conflicts:
-        print("No conflicts found. Adding event to calendar.")
-        add_event_to_calendar("Test Event", appointment_datetime, duration_minutes=30)
+    # 1️⃣ Pre-populate calendar with a few appointments
+    initial_appointments = [
+        ("Team Meeting", datetime.datetime(2025, 12, 10, 10, 0, tzinfo=datetime.timezone.utc)),
+        ("Lunch with Friend", datetime.datetime(2025, 12, 10, 13, 0, tzinfo=datetime.timezone.utc)),
+        ("Project Demo", datetime.datetime(2025, 12, 11, 16, 0, tzinfo=datetime.timezone.utc)),
+        ("Yoga Class", datetime.datetime(2025, 12, 12, 8, 0, tzinfo=datetime.timezone.utc))
+    ]
 
+    for subject, dt in initial_appointments:
+        add_event_to_calendar(subject, dt)
 
-    for ev in conflicts:
-        print(ev)
+    # 2️⃣ Use Case 1: Add a doctor appointment where no conflicts exist
+    appointment1 = datetime.datetime(2025, 12, 12, 15, 0, tzinfo=datetime.timezone.utc)
+    conflicts1 = check_for_conflicts(appointment1)
+    if not conflicts1:
+        print("\nNo conflicts found for Use Case 1. Adding Doctor Appointment.")
+        add_event_to_calendar("Doctor Consultation", appointment1)
+    else:
+        print("\nConflicts found for Use Case 1:")
+        for ev in conflicts1:
+            print(ev)
+
+    # 3️⃣ Use Case 2: Add a doctor appointment where a conflict exists
+    appointment2 = datetime.datetime(2025, 12, 10, 10, 15, tzinfo=datetime.timezone.utc)  # overlaps with Team Meeting
+    conflicts2 = check_for_conflicts(appointment2)
+    if not conflicts2:
+        print("\nNo conflicts found for Use Case 2. Adding Doctor Appointment.")
+        add_event_to_calendar("Doctor Consultation", appointment2)
+    else:
+        print("\nConflicts found for Use Case 2:")
+        for ev in conflicts2:
+            print(ev)

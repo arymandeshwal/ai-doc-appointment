@@ -11,10 +11,12 @@ import json
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import Response
+from twilio.rest import Client
 
-from config import SERVER_HOST, SERVER_PORT, NGROK_URL, LOG_LEVEL
+from config import SERVER_HOST, SERVER_PORT, NGROK_URL, LOG_LEVEL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
 from audio_utils import StreamingAudioConverter
 from gemini_client import GeminiLiveClient
+from tools import execute_tool
 
 # Configure logging
 logging.basicConfig(
@@ -24,6 +26,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Gemini-Twilio Voice Integration")
+
+# Twilio client for call control
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 
 @app.post("/outgoing-call")
@@ -60,13 +65,17 @@ async def media_stream(websocket: WebSocket):
     Handles bidirectional audio:
     - Receives audio from phone (Twilio -> Gemini)
     - Sends AI responses back (Gemini -> Twilio)
+    - Executes tools (calendar checks, booking)
+    - Handles call termination
     """
     await websocket.accept()
     logger.info("Twilio WebSocket connected")
 
     stream_sid: str = ""
+    call_sid: str = ""
     gemini_client: GeminiLiveClient = None
     audio_converter = StreamingAudioConverter()
+    should_end_call = False
 
     async def send_audio_to_twilio(pcm_bytes: bytes) -> None:
         """Callback to send Gemini audio to Twilio."""
@@ -91,11 +100,44 @@ async def media_stream(websocket: WebSocket):
         except Exception as e:
             logger.error(f"Error sending audio to Twilio: {e}")
 
+    async def handle_tool_call(tool_name: str, args: dict) -> dict:
+        """Execute a tool and return the result."""
+        logger.info(f"Executing tool: {tool_name}")
+        # Run synchronous tool in executor to not block
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, execute_tool, tool_name, args)
+        logger.info(f"Tool result: {result}")
+        return result
+
+    async def handle_end_call(reason: str) -> None:
+        """Handle request to end the call."""
+        nonlocal should_end_call, call_sid
+        logger.info(f"End call requested: {reason}")
+        should_end_call = True
+
+        # Give a moment for final audio to play
+        await asyncio.sleep(2)
+
+        # End the call via Twilio API
+        if call_sid:
+            try:
+                twilio_client.calls(call_sid).update(status="completed")
+                logger.info(f"Call {call_sid} terminated successfully")
+            except Exception as e:
+                logger.error(f"Failed to terminate call: {e}")
+
     try:
-        # Initialize Gemini client with callback
-        gemini_client = GeminiLiveClient(on_audio_response=send_audio_to_twilio)
+        # Initialize Gemini client with callbacks
+        gemini_client = GeminiLiveClient(
+            on_audio_response=send_audio_to_twilio,
+            on_tool_call=handle_tool_call,
+            on_end_call=handle_end_call
+        )
 
         async for message in websocket.iter_text():
+            if should_end_call:
+                break
+
             data = json.loads(message)
             event = data.get("event")
 
@@ -103,10 +145,13 @@ async def media_stream(websocket: WebSocket):
                 logger.info("Twilio stream connected")
 
             elif event == "start":
-                # Extract stream SID for sending responses
+                # Extract stream SID and call SID
                 stream_sid = data.get("streamSid", "")
                 start_data = data.get("start", {})
+                call_sid = start_data.get("callSid", "")
+
                 logger.info(f"Stream started: {stream_sid}")
+                logger.info(f"Call SID: {call_sid}")
                 logger.debug(f"Media format: {start_data.get('mediaFormat')}")
 
                 # Connect to Gemini now that we have the stream
@@ -165,7 +210,13 @@ async def root():
             "/outgoing-call": "POST - TwiML webhook for outgoing calls",
             "/media-stream": "WebSocket - Bidirectional audio stream",
             "/health": "GET - Health check"
-        }
+        },
+        "features": [
+            "Real-time voice conversation with Gemini AI",
+            "Calendar availability checking",
+            "Appointment booking",
+            "Automatic call termination"
+        ]
     }
 
 
@@ -173,6 +224,8 @@ if __name__ == "__main__":
     import uvicorn
 
     if not NGROK_URL:
-        logger.warning("NGROK_URL not set! Update .env with your ngrok URL")
+        logger.warning("NGROK_URL not detected! Make sure ngrok is running: ngrok http 8080")
+    else:
+        logger.info(f"Using ngrok URL: {NGROK_URL}")
 
     uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)

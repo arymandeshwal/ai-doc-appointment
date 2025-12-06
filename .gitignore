@@ -137,6 +137,11 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+
+# Credentials/Secrets
+credentials.json
+*.pem
+*.key
 .venv
 env/
 venv/

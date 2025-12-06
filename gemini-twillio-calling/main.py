@@ -17,6 +17,7 @@ from config import SERVER_HOST, SERVER_PORT, NGROK_URL, LOG_LEVEL, TWILIO_ACCOUN
 from audio_utils import StreamingAudioConverter
 from gemini_client import GeminiLiveClient
 from tools import execute_tool
+from conversation_logger import ConversationLogger
 
 # Configure logging
 logging.basicConfig(
@@ -76,6 +77,7 @@ async def media_stream(websocket: WebSocket):
     gemini_client: GeminiLiveClient = None
     audio_converter = StreamingAudioConverter()
     should_end_call = False
+    conversation_logger: ConversationLogger = None
 
     async def send_audio_to_twilio(pcm_bytes: bytes) -> None:
         """Callback to send Gemini audio to Twilio."""
@@ -102,11 +104,17 @@ async def media_stream(websocket: WebSocket):
 
     async def handle_tool_call(tool_name: str, args: dict) -> dict:
         """Execute a tool and return the result."""
+        nonlocal conversation_logger
         logger.info(f"Executing tool: {tool_name}")
         # Run synchronous tool in executor to not block
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, execute_tool, tool_name, args)
         logger.info(f"Tool result: {result}")
+
+        # Log tool call to conversation transcript
+        if conversation_logger:
+            conversation_logger.log_tool_call(tool_name, args, result)
+
         return result
 
     async def handle_end_call(reason: str) -> None:
@@ -126,12 +134,18 @@ async def media_stream(websocket: WebSocket):
             except Exception as e:
                 logger.error(f"Failed to terminate call: {e}")
 
+    def log_ai_audio(audio_b64: str) -> None:
+        """Callback to log AI audio to transcript."""
+        if conversation_logger:
+            conversation_logger.log_ai_audio(audio_b64)
+
     try:
         # Initialize Gemini client with callbacks
         gemini_client = GeminiLiveClient(
             on_audio_response=send_audio_to_twilio,
             on_tool_call=handle_tool_call,
-            on_end_call=handle_end_call
+            on_end_call=handle_end_call,
+            on_ai_audio=log_ai_audio
         )
 
         async for message in websocket.iter_text():
@@ -154,6 +168,9 @@ async def media_stream(websocket: WebSocket):
                 logger.info(f"Call SID: {call_sid}")
                 logger.debug(f"Media format: {start_data.get('mediaFormat')}")
 
+                # Initialize conversation logger
+                conversation_logger = ConversationLogger(call_sid, stream_sid)
+
                 # Connect to Gemini now that we have the stream
                 connected = await gemini_client.connect()
                 if not connected:
@@ -169,6 +186,10 @@ async def media_stream(websocket: WebSocket):
                 payload = media_data.get("payload", "")
 
                 if payload:
+                    # Log user audio to transcript
+                    if conversation_logger:
+                        conversation_logger.log_user_audio(payload)
+
                     # Convert Twilio mu-law (8kHz) to Gemini PCM (16kHz)
                     pcm_audio = audio_converter.twilio_to_gemini(payload)
 
@@ -189,6 +210,14 @@ async def media_stream(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Error in media stream handler: {e}")
     finally:
+        # Save conversation transcript
+        if conversation_logger:
+            try:
+                filepath = conversation_logger.save()
+                logger.info(f"Transcript saved: {filepath}")
+            except Exception as e:
+                logger.error(f"Failed to save transcript: {e}")
+
         # Clean up Gemini connection
         if gemini_client:
             await gemini_client.disconnect()

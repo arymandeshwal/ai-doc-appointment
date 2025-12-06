@@ -147,21 +147,21 @@ TOOL_DEFINITIONS = [
             },
             "required": ["date", "start_time", "end_time"]
         }
+    },
+    {
+        "name": "end_call",
+        "description": "End the phone call. IMPORTANT: You MUST speak a verbal goodbye message BEFORE calling this tool. Say something like 'Thank you, have a great day, goodbye!' or 'Vielen Dank, auf Wiederhören!' first, then call this tool. Never call this tool without saying goodbye first.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "Reason for ending the call (e.g., 'appointment_booked', 'no_availability', 'conversation_complete')"
+                }
+            },
+            "required": ["reason"]
+        }
     }
-    # {
-    #     "name": "end_call",
-    #     "description": "End the phone call. IMPORTANT: You MUST speak a verbal goodbye message BEFORE calling this tool. Say something like 'Thank you, have a great day, goodbye!' first, then call this tool. Never call this tool without saying goodbye first.",
-    #     "parameters": {
-    #         "type": "object",
-    #         "properties": {
-    #             "reason": {
-    #                 "type": "string",
-    #                 "description": "Reason for ending the call (e.g., 'appointment_booked', 'no_availability', 'conversation_complete')"
-    #             }
-    #         },
-    #         "required": ["reason"]
-    #     }
-    # }
 ]
 
 
@@ -494,10 +494,16 @@ def book_appointment(date: str, time: str, doctor_name: str,
 
         created_event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
 
+        # Format time for display (convert 24h to 12h)
+        display_time = event_datetime.strftime("%I:%M %p")
+        display_date = event_datetime.strftime("%B %d, %Y")
+
         return {
             "success": True,
             "event_id": created_event.get("id"),
-            "message": f"Appointment booked with {doctor_name} on {date} at {time}"
+            "date": display_date,
+            "time": display_time,
+            "message": f"Appointment booked with {doctor_name} on {display_date} at {display_time}"
         }
 
     except ValueError as e:
@@ -507,20 +513,20 @@ def book_appointment(date: str, time: str, doctor_name: str,
         return {"success": False, "error": str(e)}
 
 
-# def end_call(reason: str) -> dict:
-#     """
-#     Signal to end the phone call.
-#
-#     Args:
-#         reason: Reason for ending the call
-#
-#     Returns:
-#         dict indicating the call should end
-#     """
-#     return {
-#         "action": "end_call",
-#         "reason": reason
-#     }
+def end_call(reason: str) -> dict:
+    """
+    Signal to end the phone call.
+
+    Args:
+        reason: Reason for ending the call
+
+    Returns:
+        dict indicating the call should end
+    """
+    return {
+        "action": "end_call",
+        "reason": reason
+    }
 
 
 # =============================================================================
@@ -581,8 +587,8 @@ def execute_tool(tool_name: str, args: dict) -> dict:
             slot_duration_minutes=args.get("slot_duration_minutes", 30)
         )
 
-    # elif tool_name == "end_call":
-    #     result = end_call(reason=args.get("reason", "conversation_complete"))
+    elif tool_name == "end_call":
+        result = end_call(reason=args.get("reason", "conversation_complete"))
 
     else:
         logger.warning(f"Unknown tool: {tool_name}")

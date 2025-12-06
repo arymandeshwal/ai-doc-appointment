@@ -199,7 +199,7 @@ class GeminiLiveClient:
 
     async def start_conversation(self) -> None:
         """Trigger Gemini to start the conversation by introducing itself."""
-        await self.send_text("Start now. Introduce yourself and ask about available appointments.")
+        await self.send_text("The call has connected. Start speaking now - introduce yourself immediately.")
 
     async def _receive_loop(self) -> None:
         """Background task to receive and process Gemini responses."""

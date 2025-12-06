@@ -144,28 +144,65 @@ export const AppProvider = ({ children }) => {
 
         const { call_sid } = response;
         setActiveCallSid(call_sid);
-        addAiProgress(`Ringing ${doctor.name}...`, 'processing');
+        // Update "Calling..." to "Ringing..." (same message slot)
+        updateLastProgress(`Ringing ${doctor.name}...`, 'processing');
 
         // Subscribe to real-time events
         const eventSource = subscribeToCallEvents(call_sid, (event) => {
           console.log('SSE Event:', event);
 
           if (event.type === 'status') {
-            addAiProgress(event.message, 'processing');
+            // Check if this is a completion message
+            const msg = event.message.toLowerCase();
+            if (msg.includes('booked successfully') || msg.includes('appointment confirmed')) {
+              updateLastProgress(event.message, 'success');
+            } else if (msg.includes('call ended') || msg.includes('failed') || msg.includes('error')) {
+              updateLastProgress(event.message, 'error');
+            } else {
+              // Still in progress
+              updateLastProgress(event.message, 'processing');
+            }
           }
 
           if (event.type === 'tool_call') {
-            if (event.tool === 'check_availability' && event.status === 'executing') {
-              addAiProgress(`Checking calendar availability...`, 'processing');
+            if (event.tool === 'check_availability') {
+              if (event.status === 'executing') {
+                updateLastProgress(`Checking calendar availability...`, 'processing');
+              } else if (event.result) {
+                // Tool completed - show result
+                if (event.result.available) {
+                  updateLastProgress(`✓ Calendar slot is available`, 'success');
+                } else {
+                  updateLastProgress(`Calendar conflict - trying another time...`, 'info');
+                }
+              }
             }
-            if (event.tool === 'book_appointment' && event.result?.success) {
-              // Booking succeeded!
-              bookingSucceededRef.current = true;
-              setSelectedSlot({
-                date: event.result.date,
-                time: event.result.time
-              });
-              addAiProgress(`Appointment booked for ${event.result.date} at ${event.result.time}!`, 'success');
+            if (event.tool === 'find_available_slots') {
+              if (event.status === 'executing') {
+                updateLastProgress(`Finding available time slots...`, 'processing');
+              } else if (event.result) {
+                const count = event.result.count || event.result.available_slots?.length || 0;
+                updateLastProgress(`Found ${count} available slots`, 'success');
+              }
+            }
+            if (event.tool === 'book_appointment') {
+              if (event.status === 'executing') {
+                updateLastProgress(`Booking appointment...`, 'processing');
+              } else if (event.result?.success) {
+                // Booking succeeded!
+                bookingSucceededRef.current = true;
+                setSelectedSlot({
+                  date: event.result.date,
+                  time: event.result.time
+                });
+                updateLastProgress(`✓ Appointment booked for ${event.result.date} at ${event.result.time}!`, 'success');
+              }
+            }
+            if (event.tool === 'end_call') {
+              // Call is ending - update progress
+              if (bookingSucceededRef.current) {
+                updateLastProgress(`✓ Call completed - appointment confirmed!`, 'success');
+              }
             }
           }
 
@@ -173,6 +210,8 @@ export const AppProvider = ({ children }) => {
             eventSource.close();
 
             if (event.outcome === 'success' || bookingSucceededRef.current) {
+              // Make sure to show success before transitioning
+              updateLastProgress(`✓ Appointment successfully booked!`, 'success');
               setCallResult('success');
               setCurrentStep('success');
               resolve(true);
@@ -222,10 +261,11 @@ export const AppProvider = ({ children }) => {
       try {
         addAiProgress('🌍 Searching Google Places for real doctors near you...', 'processing');
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         const specialty = detectSpecialty(symptoms);
-        addAiProgress(`🔍 Detected specialty needed: ${specialty}`, 'info');
-        
+        // Update the same message to show specialty detection (keep spinner)
+        updateLastProgress(`🔍 Detected specialty: ${specialty}. Searching nearby...`, 'processing');
+
         // Use new fast Text Search API (no need for Maps JS API to be loaded)
         const places = await searchDoctorsByTextSearch(
           specialty,
@@ -233,30 +273,30 @@ export const AppProvider = ({ children }) => {
           4.0,  // Min rating
           10    // Max results
         );
-        
+
         if (places && places.length > 0) {
-          updateLastProgress(`Found ${places.length} doctors via Google Places`, 'success');
-          
+          updateLastProgress(`🌍 Found ${places.length} ${specialty}s via Google Places`, 'success');
+
           // Transform Google Places results to our format
-          matchedDoctors = places.slice(0, 8).map((place, index) => 
+          matchedDoctors = places.slice(0, 8).map((place, index) =>
             transformNewPlaceToDoctor(place, index)
           );
-          
+
           // Calculate match scores based on symptoms
           matchedDoctors = matchedDoctors.map(doctor => ({
             ...doctor,
             matchScore: calculateMatchScore(doctor, diagnosisResult)
           }));
-          
+
           // Sort by match score
           matchedDoctors.sort((a, b) => b.matchScore - a.matchScore);
         } else {
-          updateLastProgress('No doctors found via Google Places, using mock data', 'info');
+          updateLastProgress('🌍 No doctors found via Google Places, using mock data', 'info');
           matchedDoctors = findMatchingDoctors(symptoms, true, mockDoctorDatabase);
         }
       } catch (error) {
         console.error('Error searching Google Places:', error);
-        updateLastProgress('Google Places search failed, using mock data', 'info');
+        updateLastProgress('🌍 Google Places search failed, using mock data', 'error');
         matchedDoctors = findMatchingDoctors(symptoms, true, mockDoctorDatabase);
       }
     } else {

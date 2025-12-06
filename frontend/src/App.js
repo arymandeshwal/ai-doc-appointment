@@ -4,6 +4,7 @@ import SymptomInput from './components/SymptomInput';
 import AIProcessing from './components/AIProcessing';
 import Confirmation from './components/Confirmation';
 import Success from './components/Success';
+import CallFailed from './components/CallFailed';
 import './App.css';
 
 const AppContent = () => {
@@ -29,6 +30,7 @@ const AppContent = () => {
         {currentStep === 'processing' && <AIProcessing />}
         {currentStep === 'confirmation' && <Confirmation />}
         {currentStep === 'success' && <Success />}
+        {currentStep === 'failed' && <CallFailed />}
       </main>
 
       {/* Footer */}

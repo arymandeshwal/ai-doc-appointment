@@ -91,10 +91,43 @@ def check_for_conflicts(event_datetime: datetime.datetime, duration_minutes: int
         print(f"An error occurred while checking conflicts: {error}")
         return []
 
+
+def add_event_to_calendar(event_subject: str, event_datetime: datetime.datetime, duration_minutes: int = 30):
+    """
+    Add an event to Google Calendar.
+
+    Parameters:
+        event_subject (str): Title of the event
+        event_datetime (datetime.datetime): Start time of the event (UTC)
+        duration_minutes (int): Event duration in minutes (default 30)
+    """
+    service = get_calendar_service()
+
+    event = {
+        "summary": event_subject,
+        "start": {"dateTime": event_datetime.isoformat(), "timeZone": "UTC"},
+        "end": {
+            "dateTime": (event_datetime + datetime.timedelta(minutes=duration_minutes)).isoformat(),
+            "timeZone": "UTC"
+        }
+    }
+
+    try:
+        created_event = service.events().insert(calendarId="primary", body=event).execute()
+        print(f"Event created: {created_event.get('htmlLink')}")
+        return created_event
+    except HttpError as error:
+        print(f"An error occurred: {error}")
+        return None
+
 # Example usage
 if __name__ == "__main__":
-    appointment_datetime = datetime.datetime(2025, 12, 10, 15, 0, tzinfo=datetime.timezone.utc)
+    appointment_datetime = datetime.datetime(2025, 12, 12, 15, 0, tzinfo=datetime.timezone.utc)
     conflicts = check_for_conflicts(appointment_datetime, duration_minutes=30)
-    
+    if not conflicts:
+        print("No conflicts found. Adding event to calendar.")
+        add_event_to_calendar("Test Event", appointment_datetime, duration_minutes=30)
+
+
     for ev in conflicts:
         print(ev)

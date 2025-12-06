@@ -115,6 +115,9 @@ async def media_stream(websocket: WebSocket):
                     logger.error("Failed to connect to Gemini")
                     break
 
+                # Make Gemini start the conversation
+                await gemini_client.start_conversation()
+
             elif event == "media":
                 # Extract and convert audio
                 media_data = data.get("media", {})

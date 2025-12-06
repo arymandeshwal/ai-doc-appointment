@@ -113,6 +113,36 @@ class GeminiLiveClient:
         except Exception as e:
             logger.error(f"Error sending audio to Gemini: {e}")
 
+    async def send_text(self, text: str) -> None:
+        """
+        Send a text message to Gemini to trigger a response.
+
+        Args:
+            text: Text prompt to send
+        """
+        if not self._connected or not self.ws:
+            return
+
+        message = {
+            "clientContent": {
+                "turns": [{
+                    "role": "user",
+                    "parts": [{"text": text}]
+                }],
+                "turnComplete": True
+            }
+        }
+
+        try:
+            await self.ws.send(json.dumps(message))
+            logger.info(f"Sent text to Gemini: {text}")
+        except Exception as e:
+            logger.error(f"Error sending text to Gemini: {e}")
+
+    async def start_conversation(self) -> None:
+        """Trigger Gemini to start the conversation by introducing itself."""
+        await self.send_text("Start now. Introduce yourself and ask about available appointments.")
+
     async def _receive_loop(self) -> None:
         """Background task to receive and process Gemini responses."""
         try:

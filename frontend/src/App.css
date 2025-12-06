@@ -1182,3 +1182,68 @@ h2 {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary-hover);
 }
+
+/* ============== Failure Card Styles ============== */
+.failure-card {
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.failure-icon {
+  margin-bottom: 20px;
+}
+
+.failure-card h2 {
+  color: var(--danger-color);
+  margin-bottom: 15px;
+}
+
+.failure-reason {
+  font-size: 18px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #FEF2F2;
+  border-radius: 10px;
+  border: 1px solid #FECACA;
+}
+
+.failure-doctor {
+  color: var(--text-secondary);
+  margin-bottom: 25px;
+}
+
+.failure-info {
+  text-align: left;
+  background: var(--bg-primary);
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 30px;
+}
+
+.failure-info p {
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.failure-info ul {
+  list-style-type: disc;
+  padding-left: 25px;
+  color: var(--text-secondary);
+}
+
+.failure-info li {
+  margin-bottom: 8px;
+}
+
+.failure-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+.failure-actions .btn {
+  min-width: 150px;
+}

@@ -8,7 +8,7 @@ from typing import Callable, Optional, Awaitable, Any
 import websockets
 from websockets.asyncio.client import ClientConnection
 
-from config import GEMINI_WS_URL, GEMINI_MODEL, SYSTEM_INSTRUCTION
+from config import GEMINI_WS_URL, GEMINI_MODEL, get_system_instruction
 from audio_utils import gemini_audio_to_base64
 from tools import TOOL_DEFINITIONS
 
@@ -30,7 +30,8 @@ class GeminiLiveClient:
         self,
         on_audio_response: Callable[[bytes], Awaitable[None]],
         on_tool_call: Optional[Callable[[str, dict], Awaitable[dict]]] = None,
-        on_end_call: Optional[Callable[[str], Awaitable[None]]] = None
+        on_end_call: Optional[Callable[[str], Awaitable[None]]] = None,
+        on_ai_audio: Optional[Callable[[str], None]] = None
     ):
         """
         Initialize Gemini client.
@@ -41,11 +42,13 @@ class GeminiLiveClient:
             on_tool_call: Async callback for tool execution. Receives (tool_name, args),
                           returns result dict
             on_end_call: Async callback when end_call tool is invoked
+            on_ai_audio: Optional sync callback for logging AI audio (receives base64 string)
         """
         self.ws: Optional[ClientConnection] = None
         self.on_audio_response = on_audio_response
         self.on_tool_call = on_tool_call
         self.on_end_call = on_end_call
+        self.on_ai_audio = on_ai_audio
         self._receive_task: Optional[asyncio.Task] = None
         self._connected = False
 
@@ -66,6 +69,9 @@ class GeminiLiveClient:
             }]
 
             # Send setup message with tools
+            # Get fresh system instruction with current date/time
+            system_instruction = get_system_instruction()
+
             setup_message = {
                 "setup": {
                     "model": GEMINI_MODEL,
@@ -80,7 +86,7 @@ class GeminiLiveClient:
                         }
                     },
                     "systemInstruction": {
-                        "parts": [{"text": SYSTEM_INSTRUCTION}]
+                        "parts": [{"text": system_instruction}]
                     },
                     "tools": tools_config
                 }
@@ -228,6 +234,11 @@ class GeminiLiveClient:
                             # Decode audio and send to callback
                             audio_b64 = inline_data.get("data", "")
                             audio_bytes = base64.b64decode(audio_b64)
+
+                            # Log AI audio if callback provided
+                            if self.on_ai_audio:
+                                self.on_ai_audio(audio_b64)
+
                             await self.on_audio_response(audio_bytes)
 
         except json.JSONDecodeError as e:

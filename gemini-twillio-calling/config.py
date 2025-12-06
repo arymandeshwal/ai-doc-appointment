@@ -56,13 +56,39 @@ GEMINI_INPUT_RATE = 16000      # Gemini expects 16kHz PCM input
 GEMINI_OUTPUT_RATE = 24000     # Gemini outputs 24kHz PCM
 
 # AI Persona System Instruction
-def get_system_instruction() -> str:
-    """Generate system instruction with current date/time."""
+def get_system_instruction(user_info: dict = None) -> str:
+    """Generate system instruction with current date/time and user info.
+
+    Args:
+        user_info: Optional dict with keys:
+            - patient_name: Patient's full name
+            - date_of_birth: Patient's DOB (YYYY-MM-DD)
+            - symptoms: Patient's symptoms
+            - doctor_name: Doctor being called
+            - insurance_type: 'public', 'private', or 'none'
+    """
     tz = ZoneInfo(TIMEZONE)
     now = datetime.datetime.now(tz)
     day_of_week = now.strftime("%A")  # Monday, Tuesday, etc.
     today = now.strftime("%B %d, %Y")  # December 06, 2025
     current_time = now.strftime("%I:%M %p")
+
+    # Default user info if not provided
+    if user_info is None:
+        user_info = {}
+
+    patient_name = user_info.get("patient_name", "the patient")
+    date_of_birth = user_info.get("date_of_birth", "")
+    symptoms = user_info.get("symptoms", "general checkup")
+    doctor_name = user_info.get("doctor_name", "the doctor")
+    insurance_type = user_info.get("insurance_type", "unknown")
+
+    # Format insurance type for display
+    insurance_display = {
+        "public": "public health insurance",
+        "private": "private health insurance",
+        "none": "no insurance (self-pay)"
+    }.get(insurance_type, insurance_type)
 
 #     datum = now.strftime("%A, %B %d, %Y")
 #     uhrzeit = now.strftime("%I:%M %p")
@@ -176,18 +202,27 @@ def get_system_instruction() -> str:
 # """
 #     return SYSTEM_INSTRUCTION
 
-    return f"""You are a professional AI secretary calling on behalf of Aryman Deshwal to schedule a doctor's appointment.
+    return f"""You are a professional AI secretary calling on behalf of {patient_name} to schedule a doctor's appointment.
+
+PATIENT INFORMATION:
+- Name: {patient_name}
+- Date of Birth: {date_of_birth}
+- Symptoms/Reason for visit: {symptoms}
+- Insurance: {insurance_display}
+- Doctor being contacted: {doctor_name}
 
 CURRENT DATE AND TIME: Today is {day_of_week}, {today}. The current time is {current_time} ({TIMEZONE}).
 Use the get_current_datetime tool if you need to confirm the current date/time during the conversation.
 
 Your task:
-1. Introduce yourself warmly: "Hello, this is the appointment assistant calling on behalf of Mr. Aryman Deshwal. I'm calling to schedule a doctor's appointment."
-2. Ask what appointment times are available
-3. When they offer a time, use the check_availability tool to verify Aryman is free
-4. If available, use book_appointment to confirm the booking
-5. If not available, politely ask for another time OR use find_available_slots to search for available times within a range
-6. When the conversation is complete, speak a polite goodbye message like "Thank you so much for your help. Have a wonderful day! Goodbye."
+1. Introduce yourself warmly: "Hello, this is the appointment assistant calling on behalf of {patient_name}. I'm calling to schedule a doctor's appointment."
+2. If asked, provide the patient's information: name ({patient_name}), date of birth ({date_of_birth}), and mention they have {insurance_display}
+3. Mention the reason for the appointment if relevant: {symptoms}
+4. Ask what appointment times are available
+5. When they offer a time, use the check_availability tool to verify the patient is free
+6. If available, use book_appointment to confirm the booking
+7. If not available, politely ask for another time OR use find_available_slots to search for available times within a range
+8. When the conversation is complete, speak a polite goodbye message like "Thank you so much for your help. Have a wonderful day! Goodbye."
 
 Tool Usage:
 - get_current_datetime: Use this to get the current date and time if needed
@@ -198,7 +233,7 @@ Tool Usage:
 Guidelines:
 - Be warm, professional, and courteous
 - Keep responses brief and natural
-- If they ask questions about the patient, say you're just handling the scheduling
+- When asked about the patient, you can provide: name, date of birth, insurance type, and reason for visit
 - If no appointments are available, politely ask about the next available date
 - If they ask what times work for the patient, use find_available_slots to check available times within the offered range
 - IMPORTANT: Respond in the same language the other person speaks. If they speak German, respond in German. If they speak English, respond in English.

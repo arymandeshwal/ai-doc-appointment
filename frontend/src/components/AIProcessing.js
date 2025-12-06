@@ -17,6 +17,7 @@ const AIProcessing = () => {
               {item.type === 'processing' && <span className="spinner-small"></span>}
               {item.type === 'success' && <span className="check-icon">✓</span>}
               {item.type === 'info' && <span className="info-icon">ℹ</span>}
+              {item.type === 'error' && <span className="error-icon">✗</span>}
             </div>
             <div className="progress-message">{item.message}</div>
           </div>

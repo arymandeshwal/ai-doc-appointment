@@ -203,6 +203,10 @@ h2 {
   background: rgba(59, 130, 246, 0.05);
 }
 
+.ai-progress-item.error {
+  background: rgba(239, 68, 68, 0.05);
+}
+
 @keyframes slideInLeft {
   from {
     opacity: 0;
@@ -240,6 +244,12 @@ h2 {
 
 .info-icon {
   color: #3B82F6;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.error-icon {
+  color: var(--danger-color);
   font-size: 20px;
   font-weight: bold;
 }
@@ -717,7 +727,26 @@ h2 {
   font-family: inherit;
 }
 
+.form-group input[type="date"] {
+  width: 100%;
+  padding: 16px 20px;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 18px;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  min-height: 56px;
+  cursor: pointer;
+  background-color: white;
+}
+
+.form-group input[type="date"]:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+}
+
 .form-group input[type="text"]:focus,
+.form-group input[type="date"]:focus,
 .form-group textarea:focus,
 .form-group select:focus {
   outline: none;

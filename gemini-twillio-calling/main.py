@@ -54,7 +54,10 @@ call_states: Dict[str, Dict[str, Any]] = {}
 class InitiateCallRequest(BaseModel):
     doctor_name: str
     doctor_phone: str = "+4915510744774"  # Default test number
-    patient_name: str = "Aryman Deshwal"
+    patient_name: str = "John Smith"
+    date_of_birth: str = "2001-12-01"
+    symptoms: str = ""
+    insurance_type: str = "public"  # 'public', 'private', or 'none'
 
 
 class CallStatusResponse(BaseModel):
@@ -236,14 +239,6 @@ async def media_stream(websocket: WebSocket):
             conversation_logger.log_ai_audio(audio_b64)
 
     try:
-        # Initialize Gemini client with callbacks
-        gemini_client = GeminiLiveClient(
-            on_audio_response=send_audio_to_twilio,
-            on_tool_call=handle_tool_call,
-            on_end_call=handle_end_call,
-            on_ai_audio=log_ai_audio
-        )
-
         async for message in websocket.iter_text():
             if should_end_call:
                 break
@@ -264,9 +259,18 @@ async def media_stream(websocket: WebSocket):
                 logger.info(f"Call SID: {call_sid}")
                 logger.debug(f"Media format: {start_data.get('mediaFormat')}")
 
-                # Update call state for frontend
+                # Get user info from call state if available
+                user_info = None
                 if call_sid in call_states:
-                    call_states[call_sid]["status"] = "connected"
+                    state = call_states[call_sid]
+                    user_info = {
+                        "patient_name": state.get("patient_name", "the patient"),
+                        "date_of_birth": state.get("date_of_birth", ""),
+                        "symptoms": state.get("symptoms", ""),
+                        "doctor_name": state.get("doctor_name", "the doctor"),
+                        "insurance_type": state.get("insurance_type", "unknown")
+                    }
+                    state["status"] = "connected"
                     add_call_event(call_sid, {
                         "type": "status",
                         "message": "Connected! AI is speaking..."
@@ -275,7 +279,16 @@ async def media_stream(websocket: WebSocket):
                 # Initialize conversation logger
                 conversation_logger = ConversationLogger(call_sid, stream_sid)
 
-                # Connect to Gemini now that we have the stream
+                # Initialize Gemini client with callbacks and user info
+                gemini_client = GeminiLiveClient(
+                    on_audio_response=send_audio_to_twilio,
+                    on_tool_call=handle_tool_call,
+                    on_end_call=handle_end_call,
+                    on_ai_audio=log_ai_audio,
+                    user_info=user_info
+                )
+
+                # Connect to Gemini now that we have the stream and user info
                 connected = await gemini_client.connect()
                 if not connected:
                     logger.error("Failed to connect to Gemini")
@@ -363,11 +376,14 @@ async def initiate_call(request: InitiateCallRequest):
             from_=TWILIO_PHONE_NUMBER,
         )
 
-        # Initialize call state tracking
+        # Initialize call state tracking with all user info
         call_states[call.sid] = {
             "status": "initiated",
             "doctor_name": request.doctor_name,
             "patient_name": request.patient_name,
+            "date_of_birth": request.date_of_birth,
+            "symptoms": request.symptoms,
+            "insurance_type": request.insurance_type,
             "events": [{"type": "status", "message": "Call initiated..."}],
             "result": None,
             "event_index": 0,  # For SSE tracking

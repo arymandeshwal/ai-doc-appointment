@@ -6,16 +6,25 @@ const API_URL = 'http://localhost:8080';
 
 /**
  * Initiate a call to a doctor's office.
- * @param {string} doctorName - The name of the doctor to call
+ * @param {object} params - Call parameters
+ * @param {string} params.doctorName - The name of the doctor to call
+ * @param {string} params.patientName - The patient's full name
+ * @param {string} params.dateOfBirth - The patient's date of birth (YYYY-MM-DD)
+ * @param {string} params.symptoms - The patient's symptoms
+ * @param {string} params.insuranceType - The patient's insurance type (public/private/none)
  * @returns {Promise<{call_sid: string, status: string, message: string}>}
  */
-export const initiateCall = async (doctorName) => {
+export const initiateCall = async ({ doctorName, patientName, dateOfBirth, symptoms, insuranceType }) => {
   const response = await fetch(`${API_URL}/api/initiate-call`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       doctor_name: doctorName,
-      doctor_phone: '+4915510744774'  // Test number - all calls go here
+      doctor_phone: '+4915510744774',  // Test number - all calls go here
+      patient_name: patientName,
+      date_of_birth: dateOfBirth,
+      symptoms: symptoms,
+      insurance_type: insuranceType
     })
   });
 

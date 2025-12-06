@@ -84,9 +84,9 @@ const SymptomInput = () => {
         </button>
       </div>
 
-      <h2>What are your symptoms today?</h2>
+      <h2>Find a Doctor Near You</h2>
       <p className="subtitle">AI will automatically detect the right specialist and book an appointment</p>
-      
+
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label htmlFor="patient-location">Where are you located?</label>
@@ -101,7 +101,7 @@ const SymptomInput = () => {
         </div>
 
         <div className="form-group">
-          <label>Common symptoms</label>
+          <label>What are your symptoms today?</label>
           <div className="symptom-chips">
             {commonSymptoms.map(symptom => (
               <button

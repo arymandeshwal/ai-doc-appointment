@@ -6,7 +6,7 @@ const PersonaSetup = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!patientPersona.name || !patientPersona.dateOfBirth) {
+    if (!patientPersona.name || !patientPersona.dateOfBirth || !patientPersona.insuranceType) {
       alert('Please fill in all required fields.');
       return;
     }
@@ -42,11 +42,26 @@ const PersonaSetup = () => {
           />
         </div>
 
+        <div className="form-group">
+          <label htmlFor="insurance-type">Insurance Type *</label>
+          <select
+            id="insurance-type"
+            value={patientPersona.insuranceType}
+            onChange={(e) => setPatientPersona({ ...patientPersona, insuranceType: e.target.value })}
+            required
+          >
+            <option value="public">Public Insurance</option>
+            <option value="private">Private Insurance</option>
+            <option value="none">No Insurance</option>
+          </select>
+        </div>
+
         <div className="persona-info-box">
           <h4>ℹ️ Why do we need this?</h4>
           <ul>
             <li><strong>Name:</strong> For appointment bookings and confirmations</li>
             <li><strong>Date of Birth:</strong> For medical records and age-appropriate care</li>
+            <li><strong>Insurance:</strong> To find doctors that accept your insurance type</li>
           </ul>
           <p className="note">💾 Your information is saved locally and will be remembered for future searches</p>
         </div>

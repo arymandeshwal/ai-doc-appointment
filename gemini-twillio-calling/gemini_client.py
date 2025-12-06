@@ -31,7 +31,8 @@ class GeminiLiveClient:
         on_audio_response: Callable[[bytes], Awaitable[None]],
         on_tool_call: Optional[Callable[[str, dict], Awaitable[dict]]] = None,
         on_end_call: Optional[Callable[[str], Awaitable[None]]] = None,
-        on_ai_audio: Optional[Callable[[str], None]] = None
+        on_ai_audio: Optional[Callable[[str], None]] = None,
+        user_info: Optional[dict] = None
     ):
         """
         Initialize Gemini client.
@@ -43,12 +44,19 @@ class GeminiLiveClient:
                           returns result dict
             on_end_call: Async callback when end_call tool is invoked
             on_ai_audio: Optional sync callback for logging AI audio (receives base64 string)
+            user_info: Optional dict with patient info for system instruction:
+                       - patient_name: Patient's full name
+                       - date_of_birth: Patient's DOB
+                       - symptoms: Patient's symptoms
+                       - doctor_name: Doctor being called
+                       - insurance_type: 'public', 'private', or 'none'
         """
         self.ws: Optional[ClientConnection] = None
         self.on_audio_response = on_audio_response
         self.on_tool_call = on_tool_call
         self.on_end_call = on_end_call
         self.on_ai_audio = on_ai_audio
+        self.user_info = user_info
         self._receive_task: Optional[asyncio.Task] = None
         self._connected = False
 
@@ -69,8 +77,8 @@ class GeminiLiveClient:
             }]
 
             # Send setup message with tools
-            # Get fresh system instruction with current date/time
-            system_instruction = get_system_instruction()
+            # Get fresh system instruction with current date/time and user info
+            system_instruction = get_system_instruction(self.user_info)
 
             setup_message = {
                 "setup": {

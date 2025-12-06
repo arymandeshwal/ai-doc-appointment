@@ -1,7 +1,11 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useRef } from 'react';
 import { mockDoctorDatabase } from '../utils/mockData';
 import { analyzeSymptomText, findMatchingDoctors } from '../utils/helpers';
 import { searchDoctorsByTextSearch, transformNewPlaceToDoctor } from '../utils/googlePlacesApi';
+import { initiateCall, subscribeToCallEvents } from '../services/api';
+
+// Helper function for delays
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const AppContext = createContext();
 
@@ -18,8 +22,9 @@ export const AppProvider = ({ children }) => {
   
   // Patient Persona (set once, persists across searches)
   const [patientPersona, setPatientPersona] = useState({
-    name: '',
-    dateOfBirth: ''
+    name: 'John Smith',
+    dateOfBirth: '2001-12-01',
+    insuranceType: 'public' // 'public', 'private', or 'none'
   });
   
   // Search Info (changes per search)
@@ -39,8 +44,30 @@ export const AppProvider = ({ children }) => {
   const [comparisonData, setComparisonData] = useState([]);
   const [useGooglePlaces, setUseGooglePlaces] = useState(true);
 
+  // Real call integration state
+  const [callResult, setCallResult] = useState(null); // 'success' | 'failed' | null
+  const [failureReason, setFailureReason] = useState('');
+  const [activeCallSid, setActiveCallSid] = useState(null);
+
+  // Ref to track if booking succeeded (for async callback)
+  const bookingSucceededRef = useRef(false);
+
   const addAiProgress = (message, type = 'info') => {
     setAiProgress(prev => [...prev, { message, type, timestamp: new Date().toISOString() }]);
+  };
+
+  // Update the last progress item (useful for replacing "Calling..." with result)
+  const updateLastProgress = (message, type) => {
+    setAiProgress(prev => {
+      if (prev.length === 0) return prev;
+      const updated = [...prev];
+      updated[updated.length - 1] = {
+        ...updated[updated.length - 1],
+        message,
+        type
+      };
+      return updated;
+    });
   };
   
   // Intelligent specialty detection based on symptoms
@@ -91,17 +118,99 @@ export const AppProvider = ({ children }) => {
     return 'doctor';
   };
 
+  /**
+   * Attempt a real call to a doctor via the backend.
+   * Returns a Promise that resolves to true if booking succeeded, false otherwise.
+   */
+  const attemptRealCall = (doctor) => {
+    return new Promise(async (resolve) => {
+      setSelectedDoctor(doctor);
+      addAiProgress(`Calling ${doctor.name}...`, 'processing');
+
+      try {
+        const response = await initiateCall({
+          doctorName: doctor.name,
+          patientName: patientPersona.name,
+          dateOfBirth: patientPersona.dateOfBirth,
+          symptoms: symptoms,
+          insuranceType: patientPersona.insuranceType
+        });
+
+        if (response.error) {
+          updateLastProgress(`${doctor.name} - Failed to connect: ${response.error}`, 'error');
+          resolve(false);
+          return;
+        }
+
+        const { call_sid } = response;
+        setActiveCallSid(call_sid);
+        addAiProgress(`Ringing ${doctor.name}...`, 'processing');
+
+        // Subscribe to real-time events
+        const eventSource = subscribeToCallEvents(call_sid, (event) => {
+          console.log('SSE Event:', event);
+
+          if (event.type === 'status') {
+            addAiProgress(event.message, 'processing');
+          }
+
+          if (event.type === 'tool_call') {
+            if (event.tool === 'check_availability' && event.status === 'executing') {
+              addAiProgress(`Checking calendar availability...`, 'processing');
+            }
+            if (event.tool === 'book_appointment' && event.result?.success) {
+              // Booking succeeded!
+              bookingSucceededRef.current = true;
+              setSelectedSlot({
+                date: event.result.date,
+                time: event.result.time
+              });
+              addAiProgress(`Appointment booked for ${event.result.date} at ${event.result.time}!`, 'success');
+            }
+          }
+
+          if (event.type === 'call_ended') {
+            eventSource.close();
+
+            if (event.outcome === 'success' || bookingSucceededRef.current) {
+              setCallResult('success');
+              setCurrentStep('success');
+              resolve(true);
+            } else {
+              updateLastProgress(`${doctor.name} - Appointment failed: ${event.reason || 'Could not book appointment'}`, 'error');
+              resolve(false);
+            }
+          }
+
+          if (event.type === 'error') {
+            eventSource.close();
+            updateLastProgress(`${doctor.name} - Connection error: ${event.message}`, 'error');
+            resolve(false);
+          }
+        });
+
+      } catch (error) {
+        console.error('Call error:', error);
+        updateLastProgress(`${doctor.name} - Error: ${error.message}`, 'error');
+        resolve(false);
+      }
+    });
+  };
+
   const analyzeAndFindDoctors = async () => {
     setIsLoading(true);
     setAiProgress([]);
+    setCallResult(null);
+    setFailureReason('');
+    bookingSucceededRef.current = false;
     setCurrentStep('processing');
-    
-    addAiProgress('🔍 Analyzing your symptoms...', 'processing');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
+    addAiProgress('Analyzing your symptoms...', 'processing');
+    await delay(1500);
+
     const diagnosisResult = analyzeSymptomText(symptoms);
     setDiagnosis(diagnosisResult);
-    addAiProgress(`✅ Diagnosis: ${diagnosisResult.condition}`, 'success');
+    updateLastProgress(`Diagnosis: ${diagnosisResult.condition}`, 'success');
     addAiProgress(`📋 Recommended specialties: ${diagnosisResult.specialties.join(', ')}`, 'info');
     
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -126,7 +235,7 @@ export const AppProvider = ({ children }) => {
         );
         
         if (places && places.length > 0) {
-          addAiProgress(`✅ Found ${places.length} doctors via Google Places`, 'success');
+          updateLastProgress(`Found ${places.length} doctors via Google Places`, 'success');
           
           // Transform Google Places results to our format
           matchedDoctors = places.slice(0, 8).map((place, index) => 
@@ -142,80 +251,86 @@ export const AppProvider = ({ children }) => {
           // Sort by match score
           matchedDoctors.sort((a, b) => b.matchScore - a.matchScore);
         } else {
-          addAiProgress('⚠️ No doctors found via Google Places, using mock data', 'info');
+          updateLastProgress('No doctors found via Google Places, using mock data', 'info');
           matchedDoctors = findMatchingDoctors(symptoms, true, mockDoctorDatabase);
         }
       } catch (error) {
         console.error('Error searching Google Places:', error);
-        addAiProgress('⚠️ Google Places search failed, using mock data', 'info');
+        updateLastProgress('Google Places search failed, using mock data', 'info');
         matchedDoctors = findMatchingDoctors(symptoms, true, mockDoctorDatabase);
       }
     } else {
-      addAiProgress('🔎 Searching for qualified doctors in your area...', 'processing');
+      addAiProgress('Searching for qualified doctors in your area...', 'processing');
       await new Promise(resolve => setTimeout(resolve, 1500));
+      updateLastProgress('Doctor search complete', 'success');
       matchedDoctors = findMatchingDoctors(symptoms, true, mockDoctorDatabase);
     }
     
     setAllDoctors(matchedDoctors);
-    addAiProgress(`✅ Found ${matchedDoctors.length} qualified doctors`, 'success');
-    
+    addAiProgress(`Found ${matchedDoctors.length} qualified doctors`, 'success');
+
     // AI decides which doctors to call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    addAiProgress('🤖 AI is evaluating doctors based on multiple parameters...', 'processing');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // AI calls top 3 doctors
-    const topDoctors = matchedDoctors.slice(0, 3);
-    addAiProgress(`📞 Calling top ${topDoctors.length} doctors to check availability...`, 'processing');
-    
-    const comparisons = [];
-    for (let i = 0; i < topDoctors.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1200));
-      const doctor = topDoctors[i];
-      addAiProgress(`📞 Calling ${doctor.name}...`, 'processing');
-      
-      await new Promise(resolve => setTimeout(resolve, 800));
-      addAiProgress(`✅ ${doctor.name} is available`, 'success');
-      
-      // Calculate score for comparison
-      const score = calculateDoctorScore(doctor);
-      comparisons.push({
-        doctor,
-        score,
-        reasons: getScoreReasons(doctor, score)
-      });
-    }
-    
-    setComparisonData(comparisons);
-    
-    // AI compares and makes decision
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    addAiProgress('🤔 Comparing all available options...', 'processing');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Sort by score and pick best
+    await delay(1000);
+    addAiProgress('AI is evaluating doctors based on multiple parameters...', 'processing');
+    await delay(1500);
+
+    // Calculate scores for top doctors
+    const topDoctors = matchedDoctors.slice(0, 4); // Get top 4 for potential calls
+    const comparisons = topDoctors.map(doctor => ({
+      doctor,
+      score: calculateDoctorScore(doctor),
+      reasons: getScoreReasons(doctor, calculateDoctorScore(doctor))
+    }));
     comparisons.sort((a, b) => b.score - a.score);
-    const bestDoctor = comparisons[0].doctor;
-    const bestSlot = bestDoctor.availability[0];
-    
-    setSelectedDoctor(bestDoctor);
-    setSelectedSlot(bestSlot);
-    
-    addAiProgress(`🏆 Best match found: ${bestDoctor.name}`, 'success');
-    addAiProgress(`📅 Best available time: ${bestSlot.date} at ${bestSlot.time}`, 'success');
-    
-    setIsLoading(false);
-    
-    // Auto-book or ask for confirmation
-    if (searchInfo.autoBook) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      addAiProgress('📅 Automatically booking appointment to your calendar...', 'processing');
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      addAiProgress('✅ Appointment confirmed and added to calendar!', 'success');
-      setCurrentStep('success');
-    } else {
-      setCurrentStep('confirmation');
+    setComparisonData(comparisons.slice(0, 3)); // Show top 3 in comparison
+
+    updateLastProgress('Doctor evaluation complete', 'success');
+    addAiProgress(`Calling top doctors to check availability...`, 'info');
+
+    // Step 4: Doctors 1 & 2 - Simulated unavailable
+    const simulatedReasons = ['No available slots this week', 'Line busy - try again later'];
+
+    for (let i = 0; i < 2 && i < matchedDoctors.length; i++) {
+      await delay(1500);
+      const doctor = matchedDoctors[i];
+      addAiProgress(`Calling ${doctor.name}...`, 'processing');
+      await delay(2000);
+      // Replace "Calling..." with error result (removes spinner)
+      updateLastProgress(`${doctor.name} - ${simulatedReasons[i]}`, 'error');
+      await delay(500);
     }
+
+    // Step 5: Doctor 3 - REAL CALL
+    if (matchedDoctors.length >= 3) {
+      await delay(1000);
+      addAiProgress(`Trying next available doctor...`, 'info');
+      await delay(500);
+
+      let bookingSuccess = await attemptRealCall(matchedDoctors[2]);
+
+      // Step 6: Doctor 4 - FALLBACK if Doctor 3 failed
+      if (!bookingSuccess && matchedDoctors.length >= 4) {
+        await delay(1000);
+        addAiProgress(`Trying another doctor...`, 'info');
+        await delay(500);
+
+        bookingSuccess = await attemptRealCall(matchedDoctors[3]);
+      }
+
+      // Step 7: If both failed, show failure screen
+      if (!bookingSuccess) {
+        setCallResult('failed');
+        setFailureReason('Could not book an appointment with any available doctor. Please try again later.');
+        setCurrentStep('failed');
+      }
+    } else {
+      // Not enough doctors found
+      setCallResult('failed');
+      setFailureReason('Not enough doctors available in your area.');
+      setCurrentStep('failed');
+    }
+
+    setIsLoading(false);
   };
 
   const calculateDoctorScore = (doctor) => {
@@ -284,6 +399,38 @@ export const AppProvider = ({ children }) => {
     setCurrentStep('success');
   };
 
+  /**
+   * Retry the call sequence starting from doctor 3
+   */
+  const retryCall = async () => {
+    setCallResult(null);
+    setFailureReason('');
+    bookingSucceededRef.current = false;
+    setCurrentStep('processing');
+    setAiProgress([]);
+
+    addAiProgress('Retrying to book an appointment...', 'processing');
+    await delay(1000);
+    updateLastProgress('Retry initiated', 'success');
+
+    // Try doctors 3 and 4 again
+    if (allDoctors.length >= 3) {
+      let bookingSuccess = await attemptRealCall(allDoctors[2]);
+
+      if (!bookingSuccess && allDoctors.length >= 4) {
+        await delay(1000);
+        addAiProgress(`Trying another doctor...`, 'info');
+        bookingSuccess = await attemptRealCall(allDoctors[3]);
+      }
+
+      if (!bookingSuccess) {
+        setCallResult('failed');
+        setFailureReason('Could not book an appointment. Please try again later.');
+        setCurrentStep('failed');
+      }
+    }
+  };
+
   const startOver = () => {
     setCurrentStep('symptom'); // Go back to symptom input, persona stays
     setSearchInfo({
@@ -299,6 +446,10 @@ export const AppProvider = ({ children }) => {
     setIsLoading(false);
     setAiProgress([]);
     setComparisonData([]);
+    setCallResult(null);
+    setFailureReason('');
+    setActiveCallSid(null);
+    bookingSucceededRef.current = false;
   };
 
   const value = {
@@ -319,9 +470,12 @@ export const AppProvider = ({ children }) => {
     comparisonData,
     useGooglePlaces,
     setUseGooglePlaces,
+    callResult,
+    failureReason,
     analyzeAndFindDoctors,
     confirmAppointment,
-    startOver
+    startOver,
+    retryCall
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

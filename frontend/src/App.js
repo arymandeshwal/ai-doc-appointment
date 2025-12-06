@@ -1,5 +1,6 @@
 import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import PersonaSetup from './components/PersonaSetup';
 import SymptomInput from './components/SymptomInput';
 import AIProcessing from './components/AIProcessing';
 import Confirmation from './components/Confirmation';
@@ -12,6 +13,7 @@ const AppContent = () => {
 
   return (
     <div className="container">
+      
       {/* Header */}
       <header className="header">
         <div className="logo">
@@ -26,6 +28,7 @@ const AppContent = () => {
 
       {/* Main Content */}
       <main className="main-content">
+        {currentStep === 'persona' && <PersonaSetup />}
         {currentStep === 'symptom' && <SymptomInput />}
         {currentStep === 'processing' && <AIProcessing />}
         {currentStep === 'confirmation' && <Confirmation />}

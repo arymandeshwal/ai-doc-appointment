@@ -1120,6 +1120,85 @@ h2 {
   flex-wrap: wrap;
 }
 
+/* Persona Setup Styles */
+.persona-info-box {
+  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+  border: 2px solid var(--primary-color);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.persona-info-box h4 {
+  color: var(--primary-color);
+  margin-bottom: 15px;
+  font-size: 1.1rem;
+}
+
+.persona-info-box ul {
+  list-style: none;
+  margin-bottom: 15px;
+}
+
+.persona-info-box li {
+  padding: 8px 0;
+  color: var(--text-primary);
+}
+
+.persona-info-box .note {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-top: 10px;
+}
+
+/* Persona Header (shown on symptom input) */
+.persona-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 25px;
+  box-shadow: var(--shadow-md);
+}
+
+.persona-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.4rem;
+}
+
+.persona-details {
+  display: flex;
+  gap: 20px;
+  font-size: 0.95rem;
+  opacity: 0.95;
+}
+
+.persona-details span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--primary-color);
+  border: 2px solid white;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-primary);
+  color: var(--primary-hover);
+}
+
 /* Footer */
 .footer {
   text-align: center;

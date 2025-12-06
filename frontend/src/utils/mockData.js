@@ -12,6 +12,8 @@ export const mockDoctorDatabase = [
     phone: "(555) 123-4567",
     price: 150,
     insurance: true,
+    acceptsPrivateInsurance: true,
+    acceptsPublicInsurance: true,
     languages: ["English", "Spanish"],
     availability: [
       { date: "2025-12-08", time: "10:00 AM" },
@@ -32,6 +34,8 @@ export const mockDoctorDatabase = [
     phone: "(555) 234-5678",
     price: 200,
     insurance: true,
+    acceptsPrivateInsurance: true,
+    acceptsPublicInsurance: false,
     languages: ["English", "Mandarin"],
     availability: [
       { date: "2025-12-07", time: "11:00 AM" },
@@ -52,6 +56,8 @@ export const mockDoctorDatabase = [
     phone: "(555) 345-6789",
     price: 175,
     insurance: true,
+    acceptsPrivateInsurance: true,
+    acceptsPublicInsurance: true,
     languages: ["English", "Spanish", "Portuguese"],
     availability: [
       { date: "2025-12-07", time: "2:00 PM" },
@@ -72,6 +78,8 @@ export const mockDoctorDatabase = [
     phone: "(555) 456-7890",
     price: 125,
     insurance: false,
+    acceptsPrivateInsurance: true,
+    acceptsPublicInsurance: false,
     languages: ["English"],
     availability: [
       { date: "2025-12-07", time: "1:00 PM" },
@@ -92,6 +100,8 @@ export const mockDoctorDatabase = [
     phone: "(555) 567-8901",
     price: 160,
     insurance: true,
+    acceptsPrivateInsurance: true,
+    acceptsPublicInsurance: true,
     languages: ["English", "Hindi", "Gujarati"],
     availability: [
       { date: "2025-12-08", time: "8:00 AM" },

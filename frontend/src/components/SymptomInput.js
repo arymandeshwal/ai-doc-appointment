@@ -11,15 +11,30 @@ const commonSymptoms = [
   { id: 7, label: '🫁 Breathing Issues', value: 'breathing difficulty' },
   { id: 8, label: '😴 Fatigue', value: 'fatigue and tiredness' },
   { id: 9, label: '🤢 Nausea', value: 'nausea and vomiting' },
-  { id: 10, label: '🌡️ Body Ache', value: 'body ache' }
+  { id: 10, label: '🌡️ Body Ache', value: 'body ache' },
+  { id: 11, label: '🦷 Toothache', value: 'toothache dental pain' },
+  { id: 12, label: '👁️ Eye Problems', value: 'eye pain vision problem' },
+  { id: 13, label: '🩹 Skin Rash', value: 'skin rash itching' },
+  { id: 14, label: '💔 Chest Pain', value: 'chest pain' }
 ];
 
 const SymptomInput = () => {
-  const { patientInfo, setPatientInfo, symptoms, setSymptoms, analyzeAndFindDoctors, isLoading } = useApp();
+  const { 
+    patientPersona,
+    searchInfo,
+    setSearchInfo,
+    symptoms, 
+    setSymptoms, 
+    analyzeAndFindDoctors, 
+    isLoading,
+    useGooglePlaces,
+    setUseGooglePlaces,
+    setCurrentStep
+  } = useApp();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!patientInfo.location || !symptoms) {
+    if (!searchInfo.location || !symptoms) {
       alert('Please enter your location and symptoms.');
       return;
     }
@@ -38,26 +53,55 @@ const SymptomInput = () => {
 
   const isSymptomSelected = (symptom) => symptoms.includes(symptom.value);
 
+  const getAge = () => {
+    if (!patientPersona.dateOfBirth) return null;
+    const today = new Date();
+    const birthDate = new Date(patientPersona.dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   return (
     <div className="card">
-      <h2>What are your symptoms?</h2>
-      <p className="subtitle">Our AI will automatically find and book the best doctor for you</p>
+      {/* Patient Persona Display */}
+      <div className="persona-header">
+        <div className="persona-info">
+          <h3>👤 {patientPersona.name}</h3>
+          <div className="persona-details">
+            <span>🎂 Age: {getAge()} years</span>
+          </div>
+        </div>
+        <button 
+          type="button" 
+          className="btn btn-secondary btn-small"
+          onClick={() => setCurrentStep('persona')}
+        >
+          ✏️ Edit Profile
+        </button>
+      </div>
+
+      <h2>What are your symptoms today?</h2>
+      <p className="subtitle">AI will automatically detect the right specialist and book an appointment</p>
       
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="patient-location">Your Location</label>
+          <label htmlFor="patient-location">Where are you located?</label>
           <input
             type="text"
             id="patient-location"
             placeholder="Enter your address or zip code"
-            value={patientInfo.location}
-            onChange={(e) => setPatientInfo({ ...patientInfo, location: e.target.value })}
+            value={searchInfo.location}
+            onChange={(e) => setSearchInfo({ ...searchInfo, location: e.target.value })}
             required
           />
         </div>
 
         <div className="form-group">
-          <label>Quick Select Symptoms (Click to add/remove)</label>
+          <label>Common symptoms</label>
           <div className="symptom-chips">
             {commonSymptoms.map(symptom => (
               <button
@@ -87,12 +131,30 @@ const SymptomInput = () => {
           <label className="permission-label">
             <input
               type="checkbox"
-              checked={patientInfo.autoBook}
-              onChange={(e) => setPatientInfo({ ...patientInfo, autoBook: e.target.checked })}
+              checked={searchInfo.autoBook}
+              onChange={(e) => setSearchInfo({ ...searchInfo, autoBook: e.target.checked })}
             />
             <span>
               <strong>Let AI book directly to my calendar</strong>
               <small>AI will automatically select and book the best appointment without asking</small>
+            </span>
+          </label>
+        </div>
+
+        <div className="form-group">
+          <label className="permission-label">
+            <input
+              type="checkbox"
+              checked={useGooglePlaces}
+              onChange={(e) => setUseGooglePlaces(e.target.checked)}
+            />
+            <span>
+              <strong>Search real doctors via Google Places</strong>
+              <small>
+                {process.env.REACT_APP_GOOGLE_PLACES_API_KEY
+                  ? '✓ API Key configured - Real doctors will be searched' 
+                  : '⚠️ API Key not configured - Using mock data'}
+              </small>
             </span>
           </label>
         </div>

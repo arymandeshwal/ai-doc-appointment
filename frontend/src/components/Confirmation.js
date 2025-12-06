@@ -76,12 +76,6 @@ const Confirmation = () => {
             <span className="info-label">📞 Phone:</span>
             <span className="info-value">{selectedDoctor.phone}</span>
           </div>
-          <div className="info-row">
-            <span className="info-label">💰 Cost:</span>
-            <span className="info-value">
-              ${selectedDoctor.insurance ? (selectedDoctor.price * 0.2).toFixed(0) + ' (copay)' : selectedDoctor.price}
-            </span>
-          </div>
         </div>
       </div>
 

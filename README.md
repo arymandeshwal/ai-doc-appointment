@@ -47,6 +47,8 @@ A modern, intelligent React web application for booking doctor appointments with
 
 - **React 18** - Component-based UI framework
 - **Context API** - State management
+- **Google Places API (New)** - Fast text search for real doctors (REST API)
+- **Modern CSS3** - Animations, responsive design, CSS variables
 - **CSS3** - Modern responsive design with animations
 - **Vanilla JavaScript** - Utility functions and helpers
 
@@ -80,6 +82,7 @@ ai-doc-appointment/
 ### Prerequisites
 - Node.js (v14 or higher)
 - npm or yarn
+- **Google Places API Key** (required for real doctor search)
 
 ### Installation Steps
 
@@ -93,12 +96,27 @@ cd ai-doc-appointment
 npm install
 ```
 
-3. Start the development server:
+3. **Set up Google Places API (New - Much Faster!):**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select existing one
+   - Enable **Places API (New)** only (not the old Maps JavaScript API!)
+   - Create credentials (API Key)
+   - Copy `.env.example` to `.env`:
+     ```bash
+     cp .env.example .env
+     ```
+   - Add your API key to `.env`:
+     ```
+     REACT_APP_GOOGLE_PLACES_API_KEY=your_actual_api_key_here
+     ```
+   - See `GOOGLE_PLACES_NEW_API.md` for detailed setup instructions
+
+4. Start the development server:
 ```bash
 npm start
 ```
 
-4. Open your browser and visit:
+5. Open your browser and visit:
 ```
 http://localhost:3000
 ```

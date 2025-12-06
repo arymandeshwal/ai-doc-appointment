@@ -6,7 +6,7 @@ const Success = () => {
   const {
     selectedDoctor,
     selectedSlot,
-    patientInfo,
+    searchInfo,
     symptoms,
     startOver,
     comparisonData
@@ -36,7 +36,7 @@ const Success = () => {
       
       <h2>🎉 Appointment Confirmed!</h2>
       <p className="success-subtitle">
-        {patientInfo.autoBook 
+        {searchInfo?.autoBook 
           ? 'AI has automatically booked your appointment' 
           : 'Your appointment has been successfully confirmed'}
       </p>

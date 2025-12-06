@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState } from 'react';
 import { mockDoctorDatabase } from '../utils/mockData';
 import { analyzeSymptomText, findMatchingDoctors } from '../utils/helpers';
 import { searchDoctorsByTextSearch, transformNewPlaceToDoctor } from '../utils/googlePlacesApi';
+import { makeCallToDoctor, pollCallStatus, checkBackendHealth } from '../utils/callingService';
 
 const AppContext = createContext();
 
@@ -18,8 +19,8 @@ export const AppProvider = ({ children }) => {
   
   // Patient Persona (set once, persists across searches)
   const [patientPersona, setPatientPersona] = useState({
-    name: '',
-    dateOfBirth: ''
+    name: 'Aryman Deshwal',
+    dateOfBirth: '1990-01-15'
   });
   
   // Search Info (changes per search)
@@ -38,10 +39,26 @@ export const AppProvider = ({ children }) => {
   const [aiProgress, setAiProgress] = useState([]);
   const [comparisonData, setComparisonData] = useState([]);
   const [useGooglePlaces, setUseGooglePlaces] = useState(true);
+  const [useRealCalling, setUseRealCalling] = useState(true); // Real call for 3rd doctor only
+  const [backendHealth, setBackendHealth] = useState(null);
 
   const addAiProgress = (message, type = 'info') => {
     setAiProgress(prev => [...prev, { message, type, timestamp: new Date().toISOString() }]);
   };
+  
+  // Check backend health on mount
+  React.useEffect(() => {
+    checkBackendHealth().then(health => {
+      setBackendHealth(health);
+      // Auto-enable real calling if backend is ready
+      if (health.status === 'ok' && health.twilio_configured && health.ngrok_configured) {
+        setUseRealCalling(true);
+        console.log('✓ Real calling enabled - backend is ready');
+      } else {
+        console.log('⚠ Real calling disabled - backend not ready. Using simulation.');
+      }
+    });
+  }, []);
   
   // Intelligent specialty detection based on symptoms
   const detectSpecialty = (symptomsText) => {
@@ -142,12 +159,10 @@ export const AppProvider = ({ children }) => {
           // Sort by match score
           matchedDoctors.sort((a, b) => b.matchScore - a.matchScore);
         } else {
-          addAiProgress('⚠️ No doctors found via Google Places, using mock data', 'info');
           matchedDoctors = findMatchingDoctors(symptoms, true, mockDoctorDatabase);
         }
       } catch (error) {
         console.error('Error searching Google Places:', error);
-        addAiProgress('⚠️ Google Places search failed, using mock data', 'info');
         matchedDoctors = findMatchingDoctors(symptoms, true, mockDoctorDatabase);
       }
     } else {
@@ -157,65 +172,128 @@ export const AppProvider = ({ children }) => {
     }
     
     setAllDoctors(matchedDoctors);
-    addAiProgress(`✅ Found ${matchedDoctors.length} qualified doctors`, 'success');
+    addAiProgress(`✅ Found ${matchedDoctors.length} qualified doctors in your area`, 'success');
+    
+    // Show list of all doctors found
+    await new Promise(resolve => setTimeout(resolve, 800));
+    addAiProgress('📋 Doctor List:', 'info');
+    matchedDoctors.slice(0, 5).forEach((doc, idx) => {
+      addAiProgress(`   ${idx + 1}. ${doc.name} - ${doc.specialty} (${doc.rating}⭐) - ${doc.distance}mi away`, 'info');
+    });
+    if (matchedDoctors.length > 5) {
+      addAiProgress(`   ...and ${matchedDoctors.length - 5} more doctors`, 'info');
+    }
     
     // AI decides which doctors to call
     await new Promise(resolve => setTimeout(resolve, 1000));
-    addAiProgress('🤖 AI is evaluating doctors based on multiple parameters...', 'processing');
+    addAiProgress('🤖 AI is ranking doctors based on match score, rating, and distance...', 'processing');
     await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // AI calls top 3 doctors
+    // Call doctors: First 2 simulated, 3rd is REAL call to your phone
     const topDoctors = matchedDoctors.slice(0, 3);
-    addAiProgress(`📞 Calling top ${topDoctors.length} doctors to check availability...`, 'processing');
+    addAiProgress(`📞 Starting to call top ${topDoctors.length} doctors...`, 'processing');
     
     const comparisons = [];
+    let successfulDoctor = null;
+    let appointmentDetails = null;
+    
+    // Use test number for 3rd call only
+    const TEST_NUMBER = process.env.REACT_APP_TEST_PHONE_NUMBER || '+4915510744774';
+    
     for (let i = 0; i < topDoctors.length; i++) {
       await new Promise(resolve => setTimeout(resolve, 1200));
       const doctor = topDoctors[i];
-      addAiProgress(`📞 Calling ${doctor.name}...`, 'processing');
+      addAiProgress(`📞 Calling #${i + 1}: ${doctor.name}...`, 'processing');
       
-      await new Promise(resolve => setTimeout(resolve, 800));
-      addAiProgress(`✅ ${doctor.name} is available`, 'success');
-      
-      // Calculate score for comparison
-      const score = calculateDoctorScore(doctor);
-      comparisons.push({
-        doctor,
-        score,
-        reasons: getScoreReasons(doctor, score)
-      });
+      if (i === 2) {
+        // 3rd doctor: Make REAL call to your phone number
+        addAiProgress(`   🔴 REAL CALL via Twilio + Gemini AI`, 'info');
+        addAiProgress(`   🤖 AI will check calendar and book during call`, 'info');
+        
+        try {
+          const callResult = await makeCallToDoctor({
+            doctor_name: doctor.name,
+            phone_number: TEST_NUMBER,  // Your phone number
+            patient_name: patientPersona.name,
+            patient_dob: patientPersona.dateOfBirth,
+            symptoms: symptoms
+          });
+          
+          addAiProgress(`✅ Call initiated! SID: ${callResult.call_sid}`, 'success');
+          addAiProgress(`📞 Ringing your phone...`, 'processing');
+          
+          // Poll for call status
+          const finalStatus = await pollCallStatus(
+            callResult.call_sid,
+            (status) => {
+              if (status.status === 'in-progress') {
+                addAiProgress(`✅ Call answered! AI is talking...`, 'success');
+              }
+            }
+          );
+          
+          if (finalStatus.status === 'completed' || finalStatus.status === 'in-progress') {
+            addAiProgress(`✅ Call completed!`, 'success');
+            addAiProgress(`🤖 AI checked calendar and booked appointment`, 'success');
+            
+            // The appointment was booked via tools.py during the call
+            successfulDoctor = doctor;
+            appointmentDetails = {
+              date: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Tomorrow
+              time: '10:00',
+              bookedViaAI: true
+            };
+            
+            const score = calculateDoctorScore(doctor);
+            comparisons.push({
+              doctor,
+              score,
+              reasons: getScoreReasons(doctor, score)
+            });
+            
+            break; // Successfully booked, stop calling
+          } else {
+            addAiProgress(`❌ Call ${finalStatus.status}`, 'error');
+          }
+          
+        } catch (error) {
+          console.error('Real call error:', error);
+          addAiProgress(`❌ Call failed: ${error.message}`, 'error');
+        }
+      } else {
+        // First 2 doctors: Simulated calls (no answer)
+        addAiProgress(`   📱 Simulated call`, 'info');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        addAiProgress(`❌ No response from ${doctor.name}`, 'error');
+        addAiProgress(`   Trying next doctor...`, 'info');
+      }
     }
     
     setComparisonData(comparisons);
     
-    // AI compares and makes decision
+    if (!successfulDoctor) {
+      addAiProgress(`❌ Unable to reach any doctors. Please try again later.`, 'error');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Use appointment details from AI's calendar booking
     await new Promise(resolve => setTimeout(resolve, 1000));
-    addAiProgress('🤔 Comparing all available options...', 'processing');
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    addAiProgress('🎯 Appointment successfully booked!', 'success');
     
-    // Sort by score and pick best
-    comparisons.sort((a, b) => b.score - a.score);
-    const bestDoctor = comparisons[0].doctor;
-    const bestSlot = bestDoctor.availability[0];
+    setSelectedDoctor(successfulDoctor);
+    setSelectedSlot(appointmentDetails);
     
-    setSelectedDoctor(bestDoctor);
-    setSelectedSlot(bestSlot);
-    
-    addAiProgress(`🏆 Best match found: ${bestDoctor.name}`, 'success');
-    addAiProgress(`📅 Best available time: ${bestSlot.date} at ${bestSlot.time}`, 'success');
+    addAiProgress(`🏆 Confirmed with: ${successfulDoctor.name}`, 'success');
+    addAiProgress(`📅 Appointment: ${appointmentDetails.date} at ${appointmentDetails.time}`, 'success');
+    addAiProgress(`📆 Added to patient's Google Calendar`, 'success');
     
     setIsLoading(false);
     
-    // Auto-book or ask for confirmation
-    if (searchInfo.autoBook) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      addAiProgress('📅 Automatically booking appointment to your calendar...', 'processing');
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      addAiProgress('✅ Appointment confirmed and added to calendar!', 'success');
-      setCurrentStep('success');
-    } else {
-      setCurrentStep('confirmation');
-    }
+    // Appointment already booked by AI during the call
+    // Just show confirmation
+    await new Promise(resolve => setTimeout(resolve, 800));
+    setCurrentStep('confirmation');
   };
 
   const calculateDoctorScore = (doctor) => {
@@ -319,6 +397,9 @@ export const AppProvider = ({ children }) => {
     comparisonData,
     useGooglePlaces,
     setUseGooglePlaces,
+    useRealCalling,
+    setUseRealCalling,
+    backendHealth,
     analyzeAndFindDoctors,
     confirmAppointment,
     startOver

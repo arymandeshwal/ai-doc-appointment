@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./.venvScriptspip.exe freeze)",
+      "Bash(cat:*)",
+      "Bash(dir /s \"c:\\Users\\Aryman\\Desktop\\ai-doc-appointment\")",
+      "Bash(dir:*)",
+      "Bash(git -C \"c:\\Users\\Aryman\\Desktop\\ai-doc-appointment\" status)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -15,19 +15,8 @@ const Confirmation = () => {
 
   return (
     <div className="card">
-      <h2>✅ AI Has Selected the Best Doctor</h2>
+      <h2>✅ Appointment Confirmed</h2>
       <p className="subtitle">Review the appointment details below</p>
-
-      {/* AI Decision Summary */}
-      <div className="ai-decision-box">
-        <div className="decision-header">
-          <span className="robot-icon">🤖</span>
-          <div>
-            <h3>AI Recommendation</h3>
-            <p>After comparing all available doctors, here's the best match:</p>
-          </div>
-        </div>
-      </div>
 
       {/* Selected Doctor Details */}
       <div className="selected-doctor-card">

@@ -127,18 +127,12 @@ const SymptomInput = () => {
           />
         </div>
 
-        <div className="form-group calendar-permission">
-          <label className="permission-label">
-            <input
-              type="checkbox"
-              checked={searchInfo.autoBook}
-              onChange={(e) => setSearchInfo({ ...searchInfo, autoBook: e.target.checked })}
-            />
-            <span>
-              <strong>Let AI book directly to my calendar</strong>
-              <small>AI will automatically select and book the best appointment without asking</small>
-            </span>
-          </label>
+        <div className="ai-info-box">
+          <div className="info-icon">🤖</div>
+          <div className="info-content">
+            <strong>AI will handle everything</strong>
+            <p>The AI will call the 3rd doctor (your test number), check your calendar, and book appointments automatically</p>
+          </div>
         </div>
 
         <div className="form-group">
